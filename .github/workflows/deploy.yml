@@ -22,7 +22,7 @@ jobs:
       run: npm install -g pnpm
 
     - name: Install dependencies
-      run: pnpm ci
+      run: pnpm i --prod
 
     - name: Build NestJS app
       run: pnpm run build
