@@ -1,43 +1,75 @@
 name: Deploy to Elastic Beanstalk
+# 이 워크플로우의 이름 지정. GitHub Actions에서 실행 내역을 볼 때 표시됨.
 
 on:
   push:
     branches:
       - main
+# main 브랜치에 push 이벤트가 발생할 때 이 워크플로우를 실행함.
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # 이 Job은 GitHub 제공 Ubuntu 최신 환경에서 실행됨.
 
     steps:
-    - name: Checkout source code
-      uses: actions/checkout@v3
+      - name: Checkout source code
+        uses: actions/checkout@v3
+        # GitHub 저장소의 소스 코드를 runner 환경으로 체크아웃함.
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 18
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+        # Node.js 18 버전을 설치함. NestJS는 Node.js 기반이므로 필요함.
 
-    - name: Install pnpm
-      run: npm install -g pnpm
+      - name: Install pnpm
+        run: npm install -g pnpm
+        # pnpm 패키지 매니저를 전역으로 설치함. 이후 의존성 설치에 사용됨.
 
-    - name: Install dependencies
-      run: pnpm i
+      - name: Install dependencies
+        run: pnpm install --prod
+        # production 의존성만 설치함. devDependencies는 제외 (빌드된 앱만 배포하기 위해)
 
-    - name: Build NestJS app
-      run: pnpm run build
+      - name: Build NestJS app
+        run: pnpm run build
+        # NestJS 애플리케이션을 빌드함. 기본적으로 `dist/` 폴더 생성됨.
 
-    - name: Zip deployment package
-      run: zip -r deploy.zip . -x ".git/*" "node_modules/*" "test/*"
+      - name: Zip deployment package
+        run: |
+          zip -r deploy.zip . -x ".git/*" "node_modules/*" "test/*" ".github/*"
+        # 프로젝트 디렉토리를 `deploy.zip`으로 압축
+        # 불필요한 폴더 (.git, node_modules, 테스트 코드, GitHub 워크플로우) 제외
 
-    - name: Deploy to Elastic Beanstalk
-      uses: einaregilsson/beanstalk-deploy@v20
-      with:
-        aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        application_name: ${{ secrets.EB_APP_NAME }}
-        environment_name: ${{ secrets.EB_ENV_NAME }}
-        region: ${{ secrets.AWS_REGION }}
-        version_label: "ver-${{ github.sha }}"
-        deployment_package: deploy.zip
-        bucket_name: ${{ secrets.S3_BUCKET_NAME }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+        # GitHub에 등록된 AWS 자격증명을 기반으로 AWS CLI 인증을 설정함.
+        # 이후 모든 AWS CLI 명령어는 이 자격으로 실행됨.
+
+      - name: Upload to S3
+        run: |
+          aws s3 cp deploy.zip s3://${{ secrets.S3_BUCKET_NAME }}/deploy-${{ github.sha }}.zip
+        # 압축된 배포 패키지를 S3 버킷에 업로드함.
+        # 파일 이름에 커밋 SHA를 포함해 고유하게 버전 관리 가능함.
+
+      - name: Create new application version
+        run: |
+          aws elasticbeanstalk create-application-version \
+            --application-name ${{ secrets.EB_APP_NAME }} \
+            --version-label "ver-${{ github.sha }}" \
+            --source-bundle S3Bucket=${{ secrets.S3_BUCKET_NAME }},S3Key=deploy-${{ github.sha }}.zip
+        # EB 애플리케이션의 새 버전을 생성함.
+        # S3에서 업로드한 zip 파일을 소스로 설정함.
+        # version-label은 커밋 해시 기반으로 설정하여 추적 용이함.
+
+      - name: Deploy new version to Elastic Beanstalk
+        run: |
+          aws elasticbeanstalk update-environment \
+            --environment-name ${{ secrets.EB_ENV_NAME }} \
+            --version-label "ver-${{ github.sha }}"
+        # 위에서 생성한 버전을 EB 환경에 실제로 배포함.
+        # 환경 이름을 기반으로 정확한 타겟에 배포됨.
