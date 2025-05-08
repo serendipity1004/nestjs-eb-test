@@ -28,7 +28,7 @@ import { FileModule } from './file/file.module';
     WinstonModule.forRoot(winstonConfig),
     TypeOrmModule.forRoot({
       url: 'postgresql://postgres.jicfvuofwxdsmzjuvzfa:m7PiKNST3110AfwC@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true',
-      // type: 'postgres',
+      type: 'postgres',
       // host: 'postgres',
       // port: 5432,
       // username: 'postgres',
