@@ -28,7 +28,7 @@ jobs:
         # pnpm 패키지 매니저를 전역으로 설치함. 이후 의존성 설치에 사용됨.
 
       - name: Install dependencies
-        run: pnpm install --prod
+        run: pnpm install
         # production 의존성만 설치함. devDependencies는 제외 (빌드된 앱만 배포하기 위해)
 
       - name: Build NestJS app
